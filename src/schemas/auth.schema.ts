@@ -45,6 +45,14 @@ export const otpSchema = z.object({
     .length(6, "OTP must be exactly 6 digits") // Change 6 to your OTP length
     .regex(/^\d+$/, "OTP must contain only numbers"),
 });
+export const resendOtpSchema = z.object({
+  email: z
+    .string("Email is required")
+    .trim()
+    .min(1, "Email is required")
+    .email("Invalid email format")
+    .toLowerCase(),
+});
 export const forgottenPasswordSchema = z.object({
   email: z
     .string("Email is required")
@@ -61,6 +69,12 @@ export const resetPasswordSchema = z.object({
     .email("Invalid email format")
     .toLowerCase(),
   password: z.string("Password is required").min(8),
+  code: z
+    .string("OTP is required")
+    .trim()
+    .min(1, "OTP is required")
+    .length(6, "OTP must be exactly 6 digits") // Change 6 to your OTP length
+    .regex(/^\d+$/, "OTP must contain only numbers"),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -68,3 +82,4 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 export type otpInput = z.infer<typeof otpSchema>;
 export type forgottenPasswordInput = z.infer<typeof forgottenPasswordSchema>;
 export type resetPasswordInput = z.infer<typeof resetPasswordSchema>;
+export type resendOtpInput = z.infer<typeof resendOtpSchema>;

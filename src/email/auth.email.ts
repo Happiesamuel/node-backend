@@ -12,7 +12,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-export async function sendOtpEmail(to: string, code: number, name?: string) {
+export async function sendOtpEmail(to: string, code: string, name?: string) {
   const { html, text } = otpEmailTemplate({ code, name, expiresInMinutes: 10 });
 
   return transporter.sendMail({

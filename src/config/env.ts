@@ -13,6 +13,11 @@ const EnvSchema = z
     SMTP_USER: z.string().min(1),
     SMTP_PASS: z.string().min(1),
     MAIL_FROM: z.string().min(1),
+    DATABASE_URL: z.string(),
+    JWT_ACCESS_SECRET: z.string(),
+    JWT_REFRESH_SECRET: z.string(),
+    JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
+    JWT_REFRESH_EXPIRES_IN: z.string().default("7d"),
   })
   .transform((env) => ({
     ...env,

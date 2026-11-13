@@ -1,0 +1,113 @@
+// 1. User Signup & Account Creation Errors
+
+// Scenario	Status Code	Recommended Error Message
+// Email/User already exists	409 Conflict	"An account with this email already exists."
+// Missing or invalid input (Zod)	400 Bad Request	"Invalid input data. Please check your fields and try again."
+// Weak password	400 Bad Request	"Password must be at least 8 characters long and include a number."
+// Email delivery failed	502 Bad Gateway or 500	"Account created, but we couldn't send the verification code. Please try resending."
+
+// 2. OTP Verification & Resend Errors
+
+// Scenario	Status Code	Recommended Error Message
+// User does not exist	404 Not Found	"No account found with this email address."
+// Account already verified	400 Bad Request	"This account is already verified. Please log in."
+// Invalid / Wrong OTP	400 Bad Request	"The verification code you entered is incorrect."
+// Expired OTP	400 Bad Request or 410 Gone	"This verification code has expired. Please request a new one."
+// OTP already used	400 Bad Request	"This verification code has already been used."
+// Too many failed attempts	429 Too Many Requests	"Too many failed attempts. Please request a new code or try again later."
+// Resend requested too fast	429 Too Many Requests	"Please wait 60 seconds before requesting a new verification code."
+
+// 3. General Server & Database Errors
+
+// Scenario	Status Code	Recommended Error Message
+// Prisma Unique Constraint (P2002)	409 Conflict	"A user with this email or username already exists."
+// Prisma Record Not Found (P2025)	404 Not Found	"The requested record could not be found."
+// Unexpected database/server crash	500 Internal Server Error	"Something went wrong on our end. Please try again later."
+
+const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+// 256-bit random token. Opaque: no JWT needed for refresh tokens.
+const newRefreshToken = () => randomBytes(32).toString("hex");
+const hashToken = (t: string) => createHash("sha256").update(t).digest("hex");
+
+// Called after a successful login (or any moment you sign a user in).
+// This is where the refresh_tokens ROW is created.
+export async function issueSession(user: { id: string; email: string }) {
+  const refreshToken = newRefreshToken();
+
+  await prisma.refreshToken.create({
+    data: {
+      userId: user.id,
+      tokenHash: hashToken(refreshToken), // store the hash, never the token
+      expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
+    },
+  });
+
+  const accessToken = signAccessToken({ userId: user.id, email: user.email });
+  return { accessToken, refreshToken };
+}
+
+// POST /auth/refresh: swap an old refresh token for a new pair (rotation)
+export async function refreshSession(oldToken: string) {
+  const tokenHash = hashToken(oldToken);
+
+  const row = await prisma.refreshToken.findFirst({
+    where: { tokenHash },
+    include: { user: true },
+  });
+  if (!row) throw new AppError("Invalid session", 401);
+
+  // A revoked token being used again = likely stolen. Kill every session of this user.
+  if (row.revokedAt) {
+    await prisma.refreshToken.updateMany({
+      where: { userId: row.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    throw new AppError("Invalid session", 401);
+  }
+
+  if (row.expiresAt < new Date() || row.user.status !== "ACTIVE") {
+    throw new AppError("Session expired", 401);
+  }
+
+  const next = newRefreshToken();
+
+  await prisma.$transaction(async (tx) => {
+    // revokedAt: null in the filter means only one parallel request can rotate it
+    const revoked = await tx.refreshToken.updateMany({
+      where: { id: row.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    if (revoked.count === 0) throw new AppError("Invalid session", 401);
+
+    await tx.refreshToken.create({
+      data: {
+        userId: row.userId,
+        tokenHash: hashToken(next),
+        expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
+      },
+    });
+  });
+
+  const accessToken = signAccessToken({
+    userId: row.user.id,
+    email: row.user.email,
+  });
+  return { accessToken, refreshToken: next };
+}
+
+// POST /auth/logout: revoke just this device's session
+export async function logoutService(token: string) {
+  await prisma.refreshToken.updateMany({
+    where: { tokenHash: hashToken(token), revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+}
+
+// POST /auth/logout-all (optional): every device
+export async function logoutAllService(userId: string) {
+  await prisma.refreshToken.updateMany({
+    where: { userId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+}

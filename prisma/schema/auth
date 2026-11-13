@@ -1,0 +1,41 @@
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+model User {
+  id            String     @id @default(uuid()) @db.Uuid
+  fullName      String
+  email         String     @unique
+  passwordHash  String? // null for Google-only accounts (added in Phase 2)
+  avatarUrl     String?
+  emailVerified Boolean    @default(false)
+  status        UserStatus @default(ACTIVE)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  refreshTokens   RefreshToken[]
+  memberships     BusinessMember[]
+  stockMovements  StockMovement[]
+  purchaseOrders  PurchaseOrder[]
+  sales           Sale[]
+  salePayments    SalePayment[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}

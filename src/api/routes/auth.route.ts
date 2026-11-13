@@ -4,6 +4,7 @@ import {
   forgottenPasswordController,
   loginController,
   registerController,
+  resendOtpController,
   resetPasswordController,
   verifyOtpController,
 } from "../controllers/auth.controller";
@@ -13,12 +14,29 @@ import {
   loginSchema,
   otpSchema,
   registerSchema,
+  resendOtpSchema,
   resetPasswordSchema,
 } from "../../schemas/auth.schema";
+import {
+  loginAttemptLimiter,
+  loginEmailLimiter,
+  loginIpLimiter,
+  otpSendLimiter,
+  otpVerifyLimiter,
+  resetPasswordLimiter,
+} from "../../utils/Ratelimit";
 
 export const authRouter = Router();
 
-authRouter.post("/login", validate({ body: loginSchema }), loginController);
+authRouter.post(
+  "/login",
+  loginIpLimiter,
+  loginEmailLimiter,
+  loginAttemptLimiter,
+  loginController,
+  validate({ body: loginSchema }),
+  loginController,
+);
 
 authRouter.post(
   "/register",
@@ -28,18 +46,26 @@ authRouter.post(
 
 authRouter.post(
   "/verify-otp",
+  otpVerifyLimiter,
   validate({ body: otpSchema }),
   verifyOtpController,
+);
+authRouter.post(
+  "/resend-otp",
+  validate({ body: resendOtpSchema }),
+  resendOtpController,
 );
 
 authRouter.post(
   "/forgotten-password",
+  otpSendLimiter,
   validate({ body: forgottenPasswordSchema }),
   forgottenPasswordController,
 );
 
 authRouter.post(
   "/reset-password",
+  resetPasswordLimiter,
   validate({ body: resetPasswordSchema }),
   resetPasswordController,
 );

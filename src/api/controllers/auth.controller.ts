@@ -1,9 +1,9 @@
 import { NextFunction, Request, Response } from "express";
 import {
-  changePasswordService,
   forgottenPasswordService,
   loginService,
   registerUserService,
+  resendOtpService,
   resetPasswordService,
   verifyOtpService,
 } from "../../services/auth.service";
@@ -15,10 +15,13 @@ export async function loginController(
 ) {
   try {
     const { email, password } = req.body;
-    const { accessToken } = await loginService({ email, password });
+    const { accessToken, refreshToken } = await loginService({
+      email,
+      password,
+    });
     res.status(200).json({
       success: true,
-      data: { accessToken },
+      data: { accessToken, refreshToken },
     });
   } catch (error) {
     next(error);
@@ -62,6 +65,23 @@ export async function verifyOtpController(
     next(error);
   }
 }
+export async function resendOtpController(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const { email } = req.body;
+    await resendOtpService({ email });
+    return res.status(200).json({
+      success: true,
+      message:
+        "If an account exists and isn't verified, a new code has been sent.",
+    });
+  } catch (error) {
+    next(error);
+  }
+}
 export async function forgottenPasswordController(
   req: Request,
   res: Response,
@@ -84,8 +104,8 @@ export async function resetPasswordController(
   next: NextFunction,
 ) {
   try {
-    const { email, password } = req.body;
-    await resetPasswordService({ email, password });
+    const { email, password, code } = req.body;
+    await resetPasswordService({ email, password, code });
     res.status(200).json({
       success: true,
       message: "Password chnaged successfully. login to continue",
@@ -101,7 +121,7 @@ export async function chnagePasswordController(
 ) {
   try {
     const { userId, password, newPassword } = req.body;
-    await changePasswordService({ userId, password, newPassword });
+    // await changePasswordService({ userId, password, newPassword });
     res.status(200).json({
       success: true,
       message: "Password chnaged successfully.",
